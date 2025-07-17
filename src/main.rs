@@ -1,4 +1,6 @@
 use clap::Parser;
+use skim::prelude::*;
+use std::io::Cursor;
 
 mod db;
 use db::Database;
@@ -24,15 +26,34 @@ fn main() {
         }
     };
     
-    match db.search(&cli.mode, cli.limit) {
-        Ok(records) => {
-            for record in records {
-                println!("{}", record.command);
-            }
-        }
+    let records = match db.search(&cli.mode, cli.limit) {
+        Ok(records) => records,
         Err(e) => {
             eprintln!("Search failed: {}", e);
             std::process::exit(1);
         }
+    };
+    
+    let options = SkimOptionsBuilder::default()
+        .height(Some("50%"))
+        .multi(false)
+        .build()
+        .unwrap();
+    
+    let input = records
+        .iter()
+        .map(|r| r.command.clone())
+        .collect::<Vec<_>>()
+        .join("\n");
+    
+    let item_reader = SkimItemReader::default();
+    let items = item_reader.of_bufread(Cursor::new(input));
+    
+    let selected = Skim::run_with(&options, Some(items))
+        .map(|out| out.selected_items)
+        .unwrap_or_else(Vec::new);
+    
+    if let Some(item) = selected.first() {
+        print!("{}", item.output());
     }
 }
