@@ -7,7 +7,7 @@ function hindsight-widget() {
   
   if [[ -n "$selected" ]]; then
     BUFFER="$selected"
-    zle accept-line
+    CURSOR=${#BUFFER}
   fi
 }
 
