@@ -15,10 +15,25 @@ pub struct HistoryRecord {
 impl Database {
     pub fn new() -> Result<Self> {
         let db_path = Self::db_path()?;
-        if !db_path.exists() {
-            return Err(rusqlite::Error::InvalidPath("History database not found".into()));
-        }
         let conn = Connection::open(db_path)?;
+        
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS history (
+                id         INTEGER PRIMARY KEY,
+                command    TEXT NOT NULL,
+                exit_code  INTEGER,
+                cwd        TEXT,
+                hostname   TEXT,
+                session    TEXT,
+                start_ts   INTEGER,
+                duration   INTEGER
+            )",
+            [],
+        )?;
+        
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_session ON history(session)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_cwd ON history(cwd)", [])?;
+        
         Ok(Self { conn })
     }
 
@@ -26,6 +41,8 @@ impl Database {
         let proj_dirs = ProjectDirs::from("com", "shaarawi", "zhistory")
             .ok_or_else(|| rusqlite::Error::InvalidPath("Could not find data directory".into()))?;
         let data_dir = proj_dirs.data_dir();
+        std::fs::create_dir_all(data_dir)
+            .map_err(|_| rusqlite::Error::InvalidPath("Could not create data directory".into()))?;
         Ok(data_dir.join("history.sqlite3"))
     }
 
