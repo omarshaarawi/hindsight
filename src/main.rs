@@ -107,6 +107,7 @@ fn main() {
     }
     
     if let Some(cmd) = selected_cmd {
+        print!("__HINDSIGHT_MODE__{}__", mode);
         if edit {
             print!("__HINDSIGHT_EDIT__");
         }
