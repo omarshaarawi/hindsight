@@ -49,6 +49,11 @@ fn main() {
         }
     };
     
+    if records.is_empty() {
+        eprintln!("No history found");
+        std::process::exit(0);
+    }
+    
     let header = format!("Mode: {}", mode);
     let height = config.height.as_deref().unwrap_or("100%");
     let options = SkimOptionsBuilder::default()

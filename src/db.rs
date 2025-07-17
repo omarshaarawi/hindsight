@@ -15,6 +15,9 @@ pub struct HistoryRecord {
 impl Database {
     pub fn new() -> Result<Self> {
         let db_path = Self::db_path()?;
+        if !db_path.exists() {
+            return Err(rusqlite::Error::InvalidPath("History database not found".into()));
+        }
         let conn = Connection::open(db_path)?;
         Ok(Self { conn })
     }
