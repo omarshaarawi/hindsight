@@ -1,0 +1,320 @@
+## **Core Concepts**
+- **Changes** = mutable commits with stable IDs (like ```wtwtpovp```)
+- **Revisions** = immutable snapshots (Git commits)
+- **@** = current working copy
+- **Bookmarks** = Git branches (only needed for pushing)
+- **No staging area** = all edits automatically part of current change
+
+## **Initial Setup**
+```bash
+jj git init --colocate          # Use jj with existing Git repo
+jj config set --user user.name "Your Name"
+jj config set --user user.email "you@example.com"
+```
+
+## **Basic Commands**
+```bash
+jj                              # Show log (alias for jj log)
+jj status                       # Current change info
+jj diff                         # Show current changes
+jj diff -r CHANGE_ID            # Show specific change's diff
+jj describe -m "message"        # Set change description
+jj new                          # Create new empty change after current
+jj new -m "message"             # Create with description
+jj edit CHANGE_ID               # Switch to different change
+jj abandon                      # Delete current empty change
+```
+
+## **Navigation**
+```bash
+# Relative navigation
+@                               # Current change
+@-                              # Parent of current
+@--                             # Grandparent
+@+                              # Child of current
+
+# Examples
+jj new @-                       # New sibling of current
+jj edit @-                      # Go to parent
+jj diff -r @-                   # Show parent's diff
+```
+
+## **Primary Workflow - No Manual Bookmarks!**
+
+### **1. Basic Feature Work**
+```bash
+# Start work
+jj new main -m "implement user authentication"
+# ... make changes ...
+
+# Push to GitHub (auto-generates bookmark)
+jj git push -c @
+
+# Output: Created bookmark push-ktxsqsyqtypo for revision ktxsqsyqtypo
+```
+
+### **2. Multiple Feature Work (Sequential)**
+```bash
+# Create changes as a checklist
+jj new main -m "feature A: database schema"
+jj new -m "feature A: API endpoint"
+jj new -m "feature A: frontend integration"
+
+# Edit each change
+jj edit @--                     # Go to database schema
+# ... work ...
+jj edit @+                      # Go to API endpoint
+# ... work ...
+```
+
+### **3. Simultaneous Feature Work**
+```bash
+# Work on feature A
+jj new main -m "feature A: add logging"
+# ... work ...
+FEATURE_A_ID=$(jj log --no-graph -r @ -T change_id)
+
+# Start feature B
+jj new main -m "feature B: fix bug"
+# ... work ...
+
+# Switch between them
+jj edit $FEATURE_A_ID           # Back to feature A
+jj edit @-                      # Back to feature B
+
+# Push when ready
+jj git push -c @                # Pushes current feature
+```
+
+### **4. Reviewing Someone's Branch**
+```bash
+# Fetch and review without disrupting your work
+jj git fetch
+jj log --all                    # Find their branch
+jj new THEIR_BRANCH_ID          # Create temporary change
+# ... review code ...
+jj abandon @                    # Delete temporary change
+jj edit @-                      # Back to your work
+```
+
+### **5. Single Commit PR**
+```bash
+jj new main -m "fix: resolve issue #123"
+# ... make changes ...
+jj git push -c @                # That's it!
+```
+
+### **6. Multiple Commit PR**
+```bash
+# Using commit command
+jj new main
+jj commit -m "refactor: extract validation logic"
+jj commit -m "feat: add new validation rules"
+jj commit -m "test: add validation tests"
+jj git push -c @-               # Push parent of empty working copy
+
+# Or using new for each
+jj new main -m "refactor: extract validation logic"
+# ... work ...
+jj new -m "feat: add new validation rules"
+# ... work ...
+jj new -m "test: add validation tests"
+# ... work ...
+jj git push -c @                # Push current
+```
+
+### **7. Addressing PR Comments**
+```bash
+# Method 1: If you remember the change ID
+jj edit CHANGE_ID
+# ... make requested changes ...
+jj git push -b push-ktxsqsyqtypo  # Use the generated bookmark name
+
+# Method 2: Find it from the log
+jj git fetch
+jj log --all | grep "your PR description"
+jj edit CHANGE_ID
+# ... make changes ...
+jj bookmark list                # Find the push-* bookmark
+jj git push -b push-ktxsqsyqtypo
+```
+
+## **Advanced Patterns**
+
+### **Quick Fix While Working**
+```bash
+# Currently working on something, notice a bug
+jj new -B @ -m "fix: typo in validation"
+# ... fix bug ...
+jj edit @+                      # Continue original work
+```
+
+### **Stacked PRs**
+```bash
+# Create stack
+jj new main -m "part 1: refactor database layer"
+# ... work ...
+jj new -m "part 2: add new API endpoints"
+# ... work ...
+jj new -m "part 3: update frontend"
+
+# Push each as separate PR
+jj git push -c @--              # Push part 1
+jj git push -c @-               # Push part 2
+jj git push -c @                # Push part 3
+
+# Fix something in part 1
+jj edit @--
+# ... fix ...
+# All parts automatically rebase!
+```
+
+### **Working on Conflicted Merges**
+```bash
+# Create merge (may conflict)
+jj new main feature-branch -m "merge features"
+jj status                       # Shows conflicts
+
+# Continue working, fix later
+jj new -m "additional changes"
+# ... work normally ...
+
+# When ready to resolve
+jj edit @-                      # Go back to merge
+jj resolve                      # Opens merge tool
+```
+
+## **Squashing & Splitting**
+
+```bash
+# Squash current into parent
+jj squash
+
+# Squash into specific change
+jj squash --into TARGET_ID
+
+# Squash specific files only
+jj squash --into TARGET_ID file1.txt file2.txt
+
+# Interactive squash (choose hunks)
+jj squash --interactive
+
+# Split current change
+jj split                        # Interactive
+jj split --parallel file.txt    # Move file to sibling change
+```
+
+## **"Git Equivalent" Patterns**
+
+| Git Command | jj Equivalent |
+|-------------|---------------|
+| ```git stash``` | ```jj new @-``` (then ```jj edit``` to go back) |
+| ```git add``` | Automatic (no staging) |
+| ```git commit``` | ```jj commit``` or ```jj new``` |
+| ```git commit --amend``` | Just edit the file (auto-amends) |
+| ```git checkout branch``` | ```jj edit CHANGE_ID``` |
+| ```git rebase -i``` | ```jj edit``` old change (auto-rebases descendants) |
+| ```git cherry-pick``` | ```jj new CHANGE_ID``` |
+| ```git reset --hard``` | ```jj abandon``` |
+
+## **Undo & Recovery**
+```bash
+jj undo                         # Undo last operation
+jj operation log                # Show all operations
+jj operation undo OPERATION_ID  # Undo specific operation
+jj operation restore OPERATION_ID # Restore to specific state
+```
+
+## **Useful Aliases**
+Add to your jj config:
+```toml
+[aliases]
+pushpr = ["git", "push", "-c", "@"]
+pushnew = ["git", "push", "-c", "@-"]
+amend = ["squash"]
+```
+
+## **Common Workflows Summary**
+
+### **Daily Development**
+```bash
+# Morning: start new feature
+jj git fetch
+jj new main -m "feat: add user preferences"
+# ... work all day ...
+jj git push -c @
+
+# Afternoon: quick bug fix
+jj new main -m "fix: null pointer in auth"
+# ... fix ...
+jj git push -c @
+
+# Review PR comments
+jj edit CHANGE_ID_FROM_PR
+# ... address feedback ...
+jj git push -b push-GENERATED_NAME
+```
+
+### **Complex Feature Development**
+```bash
+# Plan with empty changes
+jj new main -m "TODO: refactor auth module"
+jj new -m "TODO: add OAuth support"
+jj new -m "TODO: update documentation"
+
+# Work through TODOs
+jj edit @--                     # Start with first
+# ... implement ...
+jj edit @+                      # Next TODO
+# ... implement ...
+
+# Push when complete
+jj git push -c @
+```
+
+## **Tips & Tricks**
+
+1. **Change IDs are colored** - Use the colored prefix shown in ```jj log```
+2. **Empty changes are fine** - Use as bookmarks or TODOs
+3. **Conflicts don't block** - Keep working, resolve when convenient
+4. **Auto-rebasing** - Edit anywhere, descendants update automatically
+5. **No bookmark management** - Use ```-c``` flag for auto-generated names
+6. **Undo anything** - ```jj undo``` is your safety net
+
+## **Quick Command Reference**
+
+```bash
+# Start work
+jj new main -m "description"
+
+# See what you're doing
+jj                              # Show log
+jj status                       # Current change details
+jj diff                         # Current changes
+
+# Move around
+jj edit CHANGE_ID               # Switch to change
+jj edit @-                      # Go to parent
+
+# Modify history
+jj squash                       # Combine with parent
+jj split                        # Split current change
+jj describe -m "new message"    # Update description
+
+# Share work
+jj git fetch                    # Get updates
+jj git push -c @                # Push current change
+jj git push -c @-               # Push parent (if working copy empty)
+
+# Undo
+jj undo                         # Undo last operation
+```
+
+## **Remember**
+- **No bookmarks needed locally** - Only for pushing
+- **Use ```-c``` flag** - Auto-generates bookmark names
+- **Everything is a change** - No special states or modes
+- **Working copy = current change** - Always committed
+- **Conflicts are normal changes** - Fix when convenient
+
+
