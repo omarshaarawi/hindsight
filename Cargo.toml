@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
-skim = "0.10"
-directories = "5.0"
+rusqlite = { version = "0.36", features = ["bundled"] }
+skim = "0.20"
+directories = "6.0"
 chrono = "0.4"
 toml = "0.8"
 serde = { version = "1.0", features = ["derive"] }

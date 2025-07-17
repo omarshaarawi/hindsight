@@ -58,13 +58,13 @@ fn main() {
         }
         
         let header = format!("Mode: {}", mode);
-        let height = config.height.as_deref().unwrap_or("100%");
+        let height = config.height.as_deref().unwrap_or("100%").to_string();
         let options = SkimOptionsBuilder::default()
-            .height(Some(height))
+            .height(height)
             .multi(false)
             .reverse(true)
-            .bind(vec!["tab:accept", "ctrl-r:accept"])
-            .header(Some(&header))
+            .bind(vec!["tab:accept".to_string(), "ctrl-r:accept".to_string()])
+            .header(Some(header))
             .build()
             .unwrap();
         

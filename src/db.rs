@@ -8,7 +8,9 @@ pub struct Database {
 
 pub struct HistoryRecord {
     pub command: String,
+    #[allow(dead_code)]
     pub timestamp: i64,
+    #[allow(dead_code)]
     pub duration: i64,
 }
 
@@ -38,7 +40,7 @@ impl Database {
     }
 
     fn db_path() -> Result<PathBuf> {
-        let proj_dirs = ProjectDirs::from("com", "shaarawi", "zhistory")
+        let proj_dirs = ProjectDirs::from("com", "shaarawi", "hindsight")
             .ok_or_else(|| rusqlite::Error::InvalidPath("Could not find data directory".into()))?;
         let data_dir = proj_dirs.data_dir();
         std::fs::create_dir_all(data_dir)

@@ -41,3 +41,10 @@ modes:
 
 - rust
 - zsh
+- sqlite3 (for recording commands)
+
+## data location
+
+history is stored in:
+- macOS: `~/Library/Application Support/com.shaarawi.hindsight/history.sqlite3`
+- linux: `~/.local/share/hindsight/history.sqlite3`
