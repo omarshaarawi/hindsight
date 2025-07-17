@@ -39,9 +39,13 @@ fn main() {
         }
     };
     
+    let header = format!("Mode: {}", cli.mode);
     let options = SkimOptionsBuilder::default()
-        .height(Some("50%"))
+        .height(Some("100%"))
         .multi(false)
+        .reverse(true)
+        .bind(vec!["ctrl-r:accept"])
+        .header(Some(&header))
         .build()
         .unwrap();
     
@@ -54,11 +58,11 @@ fn main() {
     let item_reader = SkimItemReader::default();
     let items = item_reader.of_bufread(Cursor::new(input));
     
-    let selected = Skim::run_with(&options, Some(items))
-        .map(|out| out.selected_items)
-        .unwrap_or_else(Vec::new);
-    
-    if let Some(item) = selected.first() {
-        print!("{}", item.output());
+    if let Some(output) = Skim::run_with(&options, Some(items)) {
+        if !output.is_abort {
+            if let Some(item) = output.selected_items.first() {
+                print!("{}", item.output());
+            }
+        }
     }
 }
