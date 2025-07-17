@@ -18,6 +18,11 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     
+    let current_session = std::env::var("HINDSIGHT_SESSION").unwrap_or_default();
+    let current_cwd = std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    
     let db = match Database::new() {
         Ok(db) => db,
         Err(e) => {
@@ -26,7 +31,7 @@ fn main() {
         }
     };
     
-    let records = match db.search(&cli.mode, cli.limit) {
+    let records = match db.search(&cli.mode, cli.limit, &current_session, &current_cwd) {
         Ok(records) => records,
         Err(e) => {
             eprintln!("Search failed: {}", e);

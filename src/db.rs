@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result};
+use rusqlite::{params, Connection, Result};
 use directories::ProjectDirs;
 use std::path::PathBuf;
 
@@ -26,7 +26,7 @@ impl Database {
         Ok(data_dir.join("history.sqlite3"))
     }
 
-    pub fn search(&self, mode: &str, limit: u32) -> Result<Vec<HistoryRecord>> {
+    pub fn search(&self, mode: &str, limit: u32, current_session: &str, current_cwd: &str) -> Result<Vec<HistoryRecord>> {
         let query = match mode {
             "session" => "SELECT command, start_ts, duration FROM history WHERE session = ?1 ORDER BY start_ts DESC LIMIT ?2",
             "cwd" => "SELECT command, start_ts, duration FROM history WHERE cwd = ?1 ORDER BY start_ts DESC LIMIT ?2",
@@ -36,14 +36,36 @@ impl Database {
         let mut stmt = self.conn.prepare(query)?;
         let mut records = Vec::new();
         
-        if mode == "global" {
-            let mut rows = stmt.query([limit])?;
-            while let Some(row) = rows.next()? {
-                records.push(HistoryRecord {
-                    command: row.get(0)?,
-                    timestamp: row.get(1)?,
-                    duration: row.get(2)?,
-                });
+        match mode {
+            "session" => {
+                let mut rows = stmt.query(params![current_session, limit])?;
+                while let Some(row) = rows.next()? {
+                    records.push(HistoryRecord {
+                        command: row.get(0)?,
+                        timestamp: row.get(1)?,
+                        duration: row.get(2)?,
+                    });
+                }
+            }
+            "cwd" => {
+                let mut rows = stmt.query(params![current_cwd, limit])?;
+                while let Some(row) = rows.next()? {
+                    records.push(HistoryRecord {
+                        command: row.get(0)?,
+                        timestamp: row.get(1)?,
+                        duration: row.get(2)?,
+                    });
+                }
+            }
+            _ => {
+                let mut rows = stmt.query(params![limit])?;
+                while let Some(row) = rows.next()? {
+                    records.push(HistoryRecord {
+                        command: row.get(0)?,
+                        timestamp: row.get(1)?,
+                        duration: row.get(2)?,
+                    });
+                }
             }
         }
         
