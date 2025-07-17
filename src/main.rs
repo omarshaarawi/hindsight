@@ -3,20 +3,30 @@ use skim::prelude::*;
 use std::io::Cursor;
 
 mod db;
+mod config;
 use db::Database;
+use config::Config;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    #[arg(long, default_value = "global")]
-    mode: String,
+    #[arg(long)]
+    mode: Option<String>,
     
-    #[arg(long, default_value_t = 1000)]
-    limit: u32,
+    #[arg(long)]
+    limit: Option<u32>,
 }
 
 fn main() {
     let cli = Cli::parse();
+    let config = Config::load();
+    
+    let mode = cli.mode
+        .or(config.default_mode)
+        .unwrap_or_else(|| "global".to_string());
+    let limit = cli.limit
+        .or(config.default_limit)
+        .unwrap_or(1000);
     
     let current_session = std::env::var("HINDSIGHT_SESSION").unwrap_or_default();
     let current_cwd = std::env::current_dir()
@@ -31,7 +41,7 @@ fn main() {
         }
     };
     
-    let records = match db.search(&cli.mode, cli.limit, &current_session, &current_cwd) {
+    let records = match db.search(&mode, limit, &current_session, &current_cwd) {
         Ok(records) => records,
         Err(e) => {
             eprintln!("Search failed: {}", e);
@@ -39,9 +49,10 @@ fn main() {
         }
     };
     
-    let header = format!("Mode: {}", cli.mode);
+    let header = format!("Mode: {}", mode);
+    let height = config.height.as_deref().unwrap_or("100%");
     let options = SkimOptionsBuilder::default()
-        .height(Some("100%"))
+        .height(Some(height))
         .multi(false)
         .reverse(true)
         .bind(vec!["ctrl-r:accept"])
