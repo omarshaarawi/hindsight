@@ -21,7 +21,7 @@ fn main() {
     let cli = Cli::parse();
     let config = Config::load();
     
-    let mode = cli.mode
+    let mut mode = cli.mode
         .or(config.default_mode)
         .unwrap_or_else(|| "global".to_string());
     let limit = cli.limit
@@ -41,44 +41,75 @@ fn main() {
         }
     };
     
-    let records = match db.search(&mode, limit, &current_session, &current_cwd) {
-        Ok(records) => records,
-        Err(e) => {
-            eprintln!("Search failed: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let mut selected_cmd: Option<String> = None;
+    let mut edit = false;
     
-    if records.is_empty() {
-        eprintln!("No history found");
-        std::process::exit(0);
+    loop {
+        let records = match db.search(&mode, limit, &current_session, &current_cwd) {
+            Ok(records) => records,
+            Err(e) => {
+                eprintln!("Search failed: {}", e);
+                std::process::exit(1);
+            }
+        };
+        
+        if records.is_empty() {
+            break;
+        }
+        
+        let header = format!("Mode: {}", mode);
+        let height = config.height.as_deref().unwrap_or("100%");
+        let options = SkimOptionsBuilder::default()
+            .height(Some(height))
+            .multi(false)
+            .reverse(true)
+            .bind(vec!["tab:accept", "ctrl-r:accept"])
+            .header(Some(&header))
+            .build()
+            .unwrap();
+        
+        let input = records
+            .iter()
+            .map(|r| r.command.clone())
+            .collect::<Vec<_>>()
+            .join("\n");
+        
+        let item_reader = SkimItemReader::default();
+        let items = item_reader.of_bufread(Cursor::new(input));
+        
+        if let Some(output) = Skim::run_with(&options, Some(items)) {
+            if output.is_abort {
+                break;
+            }
+            
+            if output.final_key == Key::Tab {
+                if let Some(item) = output.selected_items.first() {
+                    selected_cmd = Some(item.output().to_string());
+                    edit = true;
+                }
+                break;
+            } else if output.final_key == Key::Ctrl('r') {
+                mode = match mode.as_str() {
+                    "global" => "session".to_string(),
+                    "session" => "cwd".to_string(),
+                    _ => "global".to_string(),
+                };
+                continue;
+            } else {
+                if let Some(item) = output.selected_items.first() {
+                    selected_cmd = Some(item.output().to_string());
+                }
+                break;
+            }
+        } else {
+            break;
+        }
     }
     
-    let header = format!("Mode: {}", mode);
-    let height = config.height.as_deref().unwrap_or("100%");
-    let options = SkimOptionsBuilder::default()
-        .height(Some(height))
-        .multi(false)
-        .reverse(true)
-        .bind(vec!["ctrl-r:accept"])
-        .header(Some(&header))
-        .build()
-        .unwrap();
-    
-    let input = records
-        .iter()
-        .map(|r| r.command.clone())
-        .collect::<Vec<_>>()
-        .join("\n");
-    
-    let item_reader = SkimItemReader::default();
-    let items = item_reader.of_bufread(Cursor::new(input));
-    
-    if let Some(output) = Skim::run_with(&options, Some(items)) {
-        if !output.is_abort {
-            if let Some(item) = output.selected_items.first() {
-                print!("{}", item.output());
-            }
+    if let Some(cmd) = selected_cmd {
+        if edit {
+            print!("__HINDSIGHT_EDIT__");
         }
+        print!("{}", cmd);
     }
 }
