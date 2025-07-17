@@ -1,5 +1,8 @@
 use clap::Parser;
 
+mod db;
+use db::Database;
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -12,5 +15,24 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
-    println!("Mode: {}, Limit: {}", cli.mode, cli.limit);
+    
+    let db = match Database::new() {
+        Ok(db) => db,
+        Err(e) => {
+            eprintln!("Failed to open database: {}", e);
+            std::process::exit(1);
+        }
+    };
+    
+    match db.search(&cli.mode, cli.limit) {
+        Ok(records) => {
+            for record in records {
+                println!("{}", record.command);
+            }
+        }
+        Err(e) => {
+            eprintln!("Search failed: {}", e);
+            std::process::exit(1);
+        }
+    }
 }
