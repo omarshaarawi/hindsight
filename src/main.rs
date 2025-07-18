@@ -1,11 +1,13 @@
 use clap::Parser;
 use skim::prelude::*;
-use std::io::Cursor;
 
 mod db;
 mod config;
+mod stream;
+mod item;
 use db::Database;
 use config::Config;
+use stream::StreamingSearch;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -33,7 +35,7 @@ fn main() {
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
     
-    let db = match Database::new() {
+    let _db = match Database::new() {
         Ok(db) => db,
         Err(e) => {
             eprintln!("Failed to open database: {}", e);
@@ -45,18 +47,6 @@ fn main() {
     let mut edit = false;
     
     loop {
-        let records = match db.search(&mode, limit, &current_session, &current_cwd) {
-            Ok(records) => records,
-            Err(e) => {
-                eprintln!("Search failed: {}", e);
-                std::process::exit(1);
-            }
-        };
-        
-        if records.is_empty() {
-            break;
-        }
-        
         let header = format!("Mode: {}", mode);
         let height = config.height.as_deref().unwrap_or("100%").to_string();
         let options = SkimOptionsBuilder::default()
@@ -68,14 +58,14 @@ fn main() {
             .build()
             .unwrap();
         
-        let input = records
-            .iter()
-            .map(|r| r.command.clone())
-            .collect::<Vec<_>>()
-            .join("\n");
+        let search = StreamingSearch::new(
+            mode.clone(),
+            limit,
+            current_session.clone(),
+            current_cwd.clone(),
+        );
         
-        let item_reader = SkimItemReader::default();
-        let items = item_reader.of_bufread(Cursor::new(input));
+        let items = search.into_receiver();
         
         if let Some(output) = Skim::run_with(&options, Some(items)) {
             if output.is_abort {
