@@ -3,7 +3,7 @@ use directories::ProjectDirs;
 use std::path::PathBuf;
 
 pub struct Database {
-    conn: Connection,
+    _conn: Connection,
 }
 
 pub struct HistoryRecord {
@@ -76,7 +76,7 @@ impl Database {
             [],
         )?;
         
-        Ok(Self { conn })
+        Ok(Self { _conn: conn })
     }
 
     pub fn db_path() -> Result<PathBuf> {
@@ -88,38 +88,4 @@ impl Database {
         Ok(data_dir.join("history.sqlite3"))
     }
 
-    pub fn search(&self, mode: &str, limit: u32, current_session: &str, current_cwd: &str) -> Result<Vec<HistoryRecord>> {
-        let (query, params): (&str, Vec<&dyn rusqlite::ToSql>) = match mode {
-            "session" => (
-                "SELECT DISTINCT command, MAX(start_ts) as start_ts, MAX(duration) as duration 
-                 FROM history WHERE session = ?1 
-                 GROUP BY command ORDER BY start_ts DESC LIMIT ?2",
-                vec![&current_session, &limit]
-            ),
-            "cwd" => (
-                "SELECT DISTINCT command, MAX(start_ts) as start_ts, MAX(duration) as duration 
-                 FROM history WHERE cwd = ?1 
-                 GROUP BY command ORDER BY start_ts DESC LIMIT ?2",
-                vec![&current_cwd, &limit]
-            ),
-            _ => (
-                "SELECT DISTINCT command, MAX(start_ts) as start_ts, MAX(duration) as duration 
-                 FROM history 
-                 GROUP BY command ORDER BY start_ts DESC LIMIT ?1",
-                vec![&limit]
-            ),
-        };
-
-        let mut stmt = self.conn.prepare_cached(query)?;
-        let records = stmt.query_map(params.as_slice(), |row| {
-            Ok(HistoryRecord {
-                command: row.get(0)?,
-                timestamp: row.get(1)?,
-                duration: row.get(2)?,
-            })
-        })?
-        .collect::<Result<Vec<_>>>()?;
-        
-        Ok(records)
-    }
 }

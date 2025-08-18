@@ -12,6 +12,9 @@ mkdir -p "$INSTALL_DIR"
 cp target/release/hindsight "$INSTALL_DIR/"
 echo "Installed hindsight to $INSTALL_DIR"
 
+"$INSTALL_DIR/hindsight" init
+echo "Database initialized"
+
 SHELL_RC="$HOME/.zshrc"
 HINDSIGHT_LINE="source $PWD/shell/hindsight.zsh"
 

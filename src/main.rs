@@ -1,40 +1,66 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use skim::prelude::*;
 
-mod db;
 mod config;
-mod stream;
+mod db;
 mod item;
-use db::Database;
+mod stream;
 use config::Config;
+use db::Database;
 use stream::StreamingSearch;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
     #[arg(long)]
     mode: Option<String>,
-    
+
     #[arg(long)]
     limit: Option<u32>,
 }
 
+#[derive(Subcommand)]
+enum Commands {
+    Init,
+}
+
 fn main() {
     let cli = Cli::parse();
+
+    if let Some(command) = cli.command {
+        match command {
+            Commands::Init => match Database::new() {
+                Ok(_) => {
+                    println!(
+                        "Database initialized successfully at: {:?}",
+                        Database::db_path().unwrap()
+                    );
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    eprintln!("Failed to initialize database: {}", e);
+                    std::process::exit(1);
+                }
+            },
+        }
+    }
+
     let config = Config::load();
-    
-    let mut mode = cli.mode
+
+    let mut mode = cli
+        .mode
         .or(config.default_mode)
         .unwrap_or_else(|| "global".to_string());
-    let limit = cli.limit
-        .or(config.default_limit)
-        .unwrap_or(1000);
-    
+    let limit = cli.limit.or(config.default_limit).unwrap_or(1000);
+
     let current_session = std::env::var("HINDSIGHT_SESSION").unwrap_or_default();
     let current_cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
-    
+
     let _db = match Database::new() {
         Ok(db) => db,
         Err(e) => {
@@ -42,10 +68,10 @@ fn main() {
             std::process::exit(1);
         }
     };
-    
+
     let mut selected_cmd: Option<String> = None;
     let mut edit = false;
-    
+
     loop {
         let header = format!("Mode: {}", mode);
         let height = config.height.as_deref().unwrap_or("100%").to_string();
@@ -57,21 +83,21 @@ fn main() {
             .header(Some(header))
             .build()
             .unwrap();
-        
+
         let search = StreamingSearch::new(
             mode.clone(),
             limit,
             current_session.clone(),
             current_cwd.clone(),
         );
-        
+
         let items = search.into_receiver();
-        
+
         if let Some(output) = Skim::run_with(&options, Some(items)) {
             if output.is_abort {
                 break;
             }
-            
+
             if output.final_key == Key::Tab {
                 if let Some(item) = output.selected_items.first() {
                     selected_cmd = Some(item.output().to_string());
@@ -95,7 +121,7 @@ fn main() {
             break;
         }
     }
-    
+
     if let Some(cmd) = selected_cmd {
         print!("__HINDSIGHT_MODE__{}__", mode);
         if edit {

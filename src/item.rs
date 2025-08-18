@@ -35,7 +35,7 @@ pub struct HistoryItem {
 }
 
 impl SkimItem for HistoryItem {
-    fn text(&self) -> Cow<str> {
+    fn text(&self) -> Cow<'_, str> {
         Cow::Borrowed(&self.record.command)
     }
     
