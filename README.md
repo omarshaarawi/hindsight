@@ -23,6 +23,12 @@ source /path/to/hindsight/shell/hindsight.zsh
 - `ctrl-r` (while in search) - cycle modes: global → session → cwd → saved
 - `esc` - cancel
 
+### import existing history
+```bash
+hindsight import                  # imports from ~/.zsh_history
+hindsight import --path /path/to/history
+```
+
 ### saved commands
 save frequently used commands with tags:
 ```bash

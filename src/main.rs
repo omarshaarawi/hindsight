@@ -25,6 +25,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Init,
+    Import {
+        #[arg(short, long)]
+        path: Option<String>,
+    },
     Save {
         command: String,
         #[arg(short, long)]
@@ -59,6 +63,41 @@ fn main() {
                     std::process::exit(1);
                 }
             },
+            Commands::Import { path } => {
+                let history_path = path
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|| {
+                        dirs::home_dir()
+                            .expect("could not find home directory")
+                            .join(".zsh_history")
+                    });
+
+                if !history_path.exists() {
+                    eprintln!("History file not found: {:?}", history_path);
+                    std::process::exit(1);
+                }
+
+                let db = match Database::new() {
+                    Ok(db) => db,
+                    Err(e) => {
+                        eprintln!("Failed to open database: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+
+                println!("Importing from {:?}...", history_path);
+
+                match db.import_zsh_history(&history_path) {
+                    Ok(stats) => {
+                        println!("Imported {} commands ({} duplicates skipped)", stats.imported, stats.skipped);
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to import: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
             Commands::Save {
                 command,
                 tags,

@@ -1,6 +1,8 @@
 use rusqlite::{Connection, Result};
 use directories::ProjectDirs;
 use std::path::PathBuf;
+use std::io::{BufRead, BufReader};
+use std::fs::File;
 use chrono;
 
 pub struct Database {
@@ -248,4 +250,126 @@ impl Database {
 
         Ok(commands)
     }
+
+    pub fn import_zsh_history(&self, path: &PathBuf) -> Result<ImportStats> {
+        let file = File::open(path)
+            .map_err(|e| rusqlite::Error::InvalidPath(e.to_string().into()))?;
+        let reader = BufReader::new(file);
+
+        let hostname = hostname::get()
+            .map(|h| h.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+
+        let import_session = format!("import-{}", chrono::Utc::now().timestamp());
+
+        let mut imported = 0u64;
+        let mut skipped = 0u64;
+        let mut current_cmd = String::new();
+        let mut current_ts: Option<i64> = None;
+
+        for line in reader.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
+
+            if line.is_empty() {
+                continue;
+            }
+
+            if line.starts_with(": ") && line.contains(";") {
+                if !current_cmd.is_empty() {
+                    match self.insert_history_record(&current_cmd.trim(), current_ts, &hostname, &import_session) {
+                        Ok(true) => imported += 1,
+                        Ok(false) => skipped += 1,
+                        Err(_) => skipped += 1,
+                    }
+                    current_cmd.clear();
+                }
+
+                let parts: Vec<&str> = line.splitn(2, ';').collect();
+                if parts.len() == 2 {
+                    let meta = parts[0];
+                    let cmd = parts[1];
+
+                    current_ts = meta
+                        .strip_prefix(": ")
+                        .and_then(|s| s.split(':').next())
+                        .and_then(|s| s.trim().parse::<i64>().ok());
+
+                    if cmd.ends_with('\\') {
+                        current_cmd = cmd.strip_suffix('\\').unwrap_or(cmd).to_string();
+                        current_cmd.push('\n');
+                    } else {
+                        match self.insert_history_record(cmd.trim(), current_ts, &hostname, &import_session) {
+                            Ok(true) => imported += 1,
+                            Ok(false) => skipped += 1,
+                            Err(_) => skipped += 1,
+                        }
+                        current_ts = None;
+                    }
+                }
+            } else if !current_cmd.is_empty() {
+                if line.ends_with('\\') {
+                    current_cmd.push_str(line.strip_suffix('\\').unwrap_or(&line));
+                    current_cmd.push('\n');
+                } else {
+                    current_cmd.push_str(&line);
+                    match self.insert_history_record(&current_cmd.trim(), current_ts, &hostname, &import_session) {
+                        Ok(true) => imported += 1,
+                        Ok(false) => skipped += 1,
+                        Err(_) => skipped += 1,
+                    }
+                    current_cmd.clear();
+                    current_ts = None;
+                }
+            } else {
+                match self.insert_history_record(&line, None, &hostname, &import_session) {
+                    Ok(true) => imported += 1,
+                    Ok(false) => skipped += 1,
+                    Err(_) => skipped += 1,
+                }
+            }
+        }
+
+        if !current_cmd.is_empty() {
+            match self.insert_history_record(&current_cmd.trim(), current_ts, &hostname, &import_session) {
+                Ok(true) => imported += 1,
+                Ok(false) => skipped += 1,
+                Err(_) => skipped += 1,
+            }
+        }
+
+        Ok(ImportStats { imported, skipped })
+    }
+
+    fn insert_history_record(&self, command: &str, timestamp: Option<i64>, hostname: &str, session: &str) -> Result<bool> {
+        if command.is_empty() {
+            return Ok(false);
+        }
+
+        let ts = timestamp.unwrap_or_else(|| chrono::Utc::now().timestamp());
+
+        let exists: bool = self._conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM history WHERE command = ?1 AND start_ts = ?2)",
+            rusqlite::params![command, ts],
+            |row| row.get(0),
+        )?;
+
+        if exists {
+            return Ok(false);
+        }
+
+        self._conn.execute(
+            "INSERT INTO history (command, exit_code, cwd, hostname, session, start_ts, duration) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![command, 0i32, Option::<String>::None, hostname, session, ts, 0i64],
+        )?;
+
+        Ok(true)
+    }
+}
+
+pub struct ImportStats {
+    pub imported: u64,
+    pub skipped: u64,
 }
