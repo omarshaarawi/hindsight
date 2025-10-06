@@ -1,6 +1,6 @@
 use skim::prelude::*;
 use std::borrow::Cow;
-use crate::db::HistoryRecord;
+use crate::db::{HistoryRecord, SavedCommand};
 use chrono::Utc;
 
 fn format_duration(ms: i64) -> String {
@@ -63,6 +63,56 @@ impl SkimItem for HistoryItem {
             self.record.command, timestamp, duration_str
         );
         
+        ItemPreview::Text(preview)
+    }
+}
+
+pub struct SavedCommandItem {
+    pub command: SavedCommand,
+}
+
+impl SkimItem for SavedCommandItem {
+    fn text(&self) -> Cow<'_, str> {
+        Cow::Borrowed(&self.command.command)
+    }
+
+    fn display<'a>(&'a self, _context: DisplayContext<'a>) -> AnsiString<'a> {
+        let tags_str = if self.command.tags.is_empty() {
+            String::new()
+        } else {
+            format!("[{}] ", self.command.tags.join(", "))
+        };
+
+        let desc_str = self.command.description
+            .as_ref()
+            .map(|d| format!(" - {}", d))
+            .unwrap_or_default();
+
+        let display_str = format!("{}{}{}", tags_str, self.command.command, desc_str);
+        AnsiString::new_string(display_str, vec![])
+    }
+
+    fn preview(&self, _context: PreviewContext) -> ItemPreview {
+        let created = chrono::DateTime::from_timestamp(self.command.created_at, 0)
+            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        let tags_str = if self.command.tags.is_empty() {
+            "None".to_string()
+        } else {
+            self.command.tags.join(", ")
+        };
+
+        let desc_str = self.command.description
+            .as_ref()
+            .map(|d| d.as_str())
+            .unwrap_or("None");
+
+        let preview = format!(
+            "Command: {}\nTags: {}\nDescription: {}\nCreated: {}",
+            self.command.command, tags_str, desc_str, created
+        );
+
         ItemPreview::Text(preview)
     }
 }

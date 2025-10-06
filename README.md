@@ -15,12 +15,22 @@ source /path/to/hindsight/shell/hindsight.zsh
 
 ## usage
 
+### search
 - `ctrl-r` - open fuzzy search
 - type to filter commands
 - `enter` - execute selected command immediately
 - `tab` - insert command into prompt for editing
-- `ctrl-r` (while in search) - cycle modes: global → session → cwd
+- `ctrl-r` (while in search) - cycle modes: global → session → cwd → saved
 - `esc` - cancel
+
+### saved commands
+save frequently used commands with tags:
+```bash
+hindsight save "docker ps -a" --tags docker,containers --description "List all containers"
+hindsight list-saved              # list all saved commands
+hindsight list-saved --tags docker # filter by tag
+hindsight delete-saved 1          # delete by id
+```
 
 ## config
 
@@ -36,6 +46,7 @@ modes:
 - `global` - all history
 - `session` - current terminal session only
 - `cwd` - current directory only
+- `saved` - saved commands with tags
 
 ## requirements
 

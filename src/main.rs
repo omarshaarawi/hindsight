@@ -25,6 +25,20 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Init,
+    Save {
+        command: String,
+        #[arg(short, long)]
+        tags: Option<String>,
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+    ListSaved {
+        #[arg(short, long)]
+        tags: Option<String>,
+    },
+    DeleteSaved {
+        id: i64,
+    },
 }
 
 fn main() {
@@ -45,6 +59,91 @@ fn main() {
                     std::process::exit(1);
                 }
             },
+            Commands::Save {
+                command,
+                tags,
+                description,
+            } => {
+                let db = match Database::new() {
+                    Ok(db) => db,
+                    Err(e) => {
+                        eprintln!("Failed to open database: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+
+                let tag_vec = tags
+                    .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+                    .unwrap_or_default();
+
+                match db.save_command(&command, description.as_deref(), tag_vec) {
+                    Ok(id) => {
+                        println!("Saved command with ID: {}", id);
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to save command: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Commands::ListSaved { tags } => {
+                let db = match Database::new() {
+                    Ok(db) => db,
+                    Err(e) => {
+                        eprintln!("Failed to open database: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+
+                let tag_filter = tags.map(|t| t.split(',').map(|s| s.trim().to_string()).collect());
+
+                match db.get_saved_commands(tag_filter) {
+                    Ok(commands) => {
+                        if commands.is_empty() {
+                            println!("No saved commands found");
+                        } else {
+                            for cmd in commands {
+                                let tags_str = if cmd.tags.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!(" [{}]", cmd.tags.join(", "))
+                                };
+                                let desc_str = cmd
+                                    .description
+                                    .map(|d| format!(" - {}", d))
+                                    .unwrap_or_default();
+                                println!("#{}: {}{}{}", cmd.id, cmd.command, tags_str, desc_str);
+                            }
+                        }
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to list saved commands: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Commands::DeleteSaved { id } => {
+                let db = match Database::new() {
+                    Ok(db) => db,
+                    Err(e) => {
+                        eprintln!("Failed to open database: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+
+                match db.delete_saved_command(id) {
+                    Ok(_) => {
+                        println!("Deleted saved command #{}", id);
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to delete saved command: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
         }
     }
 
@@ -108,6 +207,7 @@ fn main() {
                 mode = match mode.as_str() {
                     "global" => "session".to_string(),
                     "session" => "cwd".to_string(),
+                    "cwd" => "saved".to_string(),
                     _ => "global".to_string(),
                 };
                 continue;
