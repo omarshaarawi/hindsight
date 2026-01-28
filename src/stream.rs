@@ -1,4 +1,3 @@
-use crossbeam_channel::{bounded, Sender};
 use rusqlite::Connection;
 use std::thread;
 use skim::prelude::*;
@@ -18,7 +17,7 @@ impl StreamingSearch {
         session: String,
         cwd: String,
     ) -> Self {
-        let (sender, receiver): (Sender<Arc<dyn SkimItem>>, SkimItemReceiver) = bounded(1000);
+        let (sender, receiver) = unbounded();
         
         let handle = thread::spawn(move || {
             let _ = Self::stream_results(&mode, limit, &session, &cwd, sender);

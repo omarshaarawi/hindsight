@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use crossterm::event::{KeyCode, KeyModifiers};
 use skim::prelude::*;
 
 mod config;
@@ -230,8 +231,6 @@ fn main() {
             .height(height)
             .multi(false)
             .reverse(true)
-            .tabstop(4)
-            .preview(None)
             .bind(vec!["tab:accept".to_string(), "ctrl-r:accept".to_string()])
             .header(Some(header))
             .build()
@@ -246,33 +245,35 @@ fn main() {
 
         let items = search.into_receiver();
 
-        if let Some(output) = Skim::run_with(&options, Some(items)) {
-            if output.is_abort {
-                break;
-            }
+        match Skim::run_with(options, Some(items)) {
+            Ok(output) => {
+                if output.is_abort {
+                    break;
+                }
 
-            if output.final_key == Key::Tab {
-                if let Some(item) = output.selected_items.first() {
-                    selected_cmd = Some(item.output().to_string());
-                    edit = true;
+                let key = &output.final_key;
+                if key.code == KeyCode::Tab {
+                    if let Some(item) = output.selected_items.first() {
+                        selected_cmd = Some(item.output().to_string());
+                        edit = true;
+                    }
+                    break;
+                } else if key.code == KeyCode::Char('r') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                    mode = match mode.as_str() {
+                        "global" => "session".to_string(),
+                        "session" => "cwd".to_string(),
+                        "cwd" => "saved".to_string(),
+                        _ => "global".to_string(),
+                    };
+                    continue;
+                } else {
+                    if let Some(item) = output.selected_items.first() {
+                        selected_cmd = Some(item.output().to_string());
+                    }
+                    break;
                 }
-                break;
-            } else if output.final_key == Key::Ctrl('r') {
-                mode = match mode.as_str() {
-                    "global" => "session".to_string(),
-                    "session" => "cwd".to_string(),
-                    "cwd" => "saved".to_string(),
-                    _ => "global".to_string(),
-                };
-                continue;
-            } else {
-                if let Some(item) = output.selected_items.first() {
-                    selected_cmd = Some(item.output().to_string());
-                }
-                break;
             }
-        } else {
-            break;
+            Err(_) => break,
         }
     }
 

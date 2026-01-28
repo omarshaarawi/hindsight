@@ -1,4 +1,5 @@
 use skim::prelude::*;
+use ratatui::text::Line;
 use std::borrow::Cow;
 use crate::db::{HistoryRecord, SavedCommand};
 use chrono::Utc;
@@ -45,19 +46,14 @@ impl SkimItem for HistoryItem {
     fn text(&self) -> Cow<'_, str> {
         Cow::Borrowed(&self.record.command)
     }
-    
-    fn display<'a>(&'a self, _context: DisplayContext<'a>) -> AnsiString<'a> {
+
+    fn display<'a>(&'a self, _context: DisplayContext) -> Line<'a> {
         let duration = format_duration(self.record.duration);
         let age = format_age(self.record.timestamp);
-        let cmd: String = self.record.command
-            .chars()
-            .map(|c| if c.is_control() { ' ' } else { c })
-            .take(200)
-            .collect();
-        let display_str = format!("{:<5} {:>10}  {}", duration, age, cmd);
-        AnsiString::new_string(display_str, vec![])
+        let display_str = format!("{:<6} {:<10}  {}", duration, age, self.record.command);
+        Line::raw(display_str)
     }
-    
+
     fn preview(&self, _context: PreviewContext) -> ItemPreview {
         let duration_secs = self.record.duration;
         let duration_str = if duration_secs < 60 {
@@ -65,16 +61,16 @@ impl SkimItem for HistoryItem {
         } else {
             format!("{}m {}s", duration_secs / 60, duration_secs % 60)
         };
-        
+
         let timestamp = chrono::DateTime::from_timestamp(self.record.timestamp, 0)
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_else(|| "Unknown".to_string());
-        
+
         let preview = format!(
             "Command: {}\nExecuted: {}\nDuration: {}",
             self.record.command, timestamp, duration_str
         );
-        
+
         ItemPreview::Text(preview)
     }
 }
@@ -88,7 +84,7 @@ impl SkimItem for SavedCommandItem {
         Cow::Borrowed(&self.command.command)
     }
 
-    fn display<'a>(&'a self, _context: DisplayContext<'a>) -> AnsiString<'a> {
+    fn display<'a>(&'a self, _context: DisplayContext) -> Line<'a> {
         let tags_str = if self.command.tags.is_empty() {
             String::new()
         } else {
@@ -101,7 +97,7 @@ impl SkimItem for SavedCommandItem {
             .unwrap_or_default();
 
         let display_str = format!("{}{}{}", tags_str, self.command.command, desc_str);
-        AnsiString::new_string(display_str, vec![])
+        Line::raw(display_str)
     }
 
     fn preview(&self, _context: PreviewContext) -> ItemPreview {
