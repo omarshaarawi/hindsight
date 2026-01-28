@@ -28,7 +28,15 @@ pub struct SavedCommand {
 impl Database {
     pub fn new() -> Result<Self> {
         let db_path = Self::db_path()?;
-        let conn = Connection::open(db_path)?;
+        Self::with_connection(Connection::open(db_path)?)
+    }
+
+    #[cfg(test)]
+    pub fn in_memory() -> Result<Self> {
+        Self::with_connection(Connection::open_in_memory()?)
+    }
+
+    fn with_connection(conn: Connection) -> Result<Self> {
         
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
@@ -266,6 +274,7 @@ impl Database {
         let mut skipped = 0u64;
         let mut current_cmd = String::new();
         let mut current_ts: Option<i64> = None;
+        let mut line_number = 0i64;
 
         for line in reader.lines() {
             let line = match line {
@@ -273,11 +282,13 @@ impl Database {
                 Err(_) => continue,
             };
 
+            line_number += 1;
+
             if line.is_empty() {
                 continue;
             }
 
-            if line.starts_with(": ") && line.contains(";") {
+            if Self::is_extended_format(&line) {
                 if !current_cmd.is_empty() {
                     match self.insert_history_record(&current_cmd.trim(), current_ts, &hostname, &import_session) {
                         Ok(true) => imported += 1,
@@ -297,8 +308,8 @@ impl Database {
                         .and_then(|s| s.split(':').next())
                         .and_then(|s| s.trim().parse::<i64>().ok());
 
-                    if cmd.ends_with('\\') {
-                        current_cmd = cmd.strip_suffix('\\').unwrap_or(cmd).to_string();
+                    if Self::is_line_continuation(cmd) {
+                        current_cmd = cmd.to_string();
                         current_cmd.push('\n');
                     } else {
                         match self.insert_history_record(cmd.trim(), current_ts, &hostname, &import_session) {
@@ -310,11 +321,10 @@ impl Database {
                     }
                 }
             } else if !current_cmd.is_empty() {
-                if line.ends_with('\\') {
-                    current_cmd.push_str(line.strip_suffix('\\').unwrap_or(&line));
+                current_cmd.push_str(&line);
+                if Self::is_line_continuation(&line) {
                     current_cmd.push('\n');
                 } else {
-                    current_cmd.push_str(&line);
                     match self.insert_history_record(&current_cmd.trim(), current_ts, &hostname, &import_session) {
                         Ok(true) => imported += 1,
                         Ok(false) => skipped += 1,
@@ -324,7 +334,7 @@ impl Database {
                     current_ts = None;
                 }
             } else {
-                match self.insert_history_record(&line, None, &hostname, &import_session) {
+                match self.insert_history_record(&line, Some(line_number), &hostname, &import_session) {
                     Ok(true) => imported += 1,
                     Ok(false) => skipped += 1,
                     Err(_) => skipped += 1,
@@ -341,6 +351,29 @@ impl Database {
         }
 
         Ok(ImportStats { imported, skipped })
+    }
+
+    fn is_extended_format(line: &str) -> bool {
+        if !line.starts_with(": ") {
+            return false;
+        }
+        let Some(rest) = line.strip_prefix(": ") else {
+            return false;
+        };
+        let Some(semicolon_pos) = rest.find(';') else {
+            return false;
+        };
+        let meta = &rest[..semicolon_pos];
+        let parts: Vec<&str> = meta.split(':').collect();
+        if parts.len() != 2 {
+            return false;
+        }
+        parts[0].trim().parse::<i64>().is_ok() && parts[1].trim().parse::<i64>().is_ok()
+    }
+
+    fn is_line_continuation(line: &str) -> bool {
+        let trailing_backslashes = line.chars().rev().take_while(|&c| c == '\\').count();
+        trailing_backslashes % 2 == 1
     }
 
     fn insert_history_record(&self, command: &str, timestamp: Option<i64>, hostname: &str, session: &str) -> Result<bool> {
@@ -372,4 +405,161 @@ impl Database {
 pub struct ImportStats {
     pub imported: u64,
     pub skipped: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn get_all_commands(db: &Database) -> Vec<String> {
+        let mut stmt = db._conn.prepare("SELECT command FROM history ORDER BY start_ts").unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn test_import_simple_format() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "echo hello").unwrap();
+        writeln!(file, "ls -la").unwrap();
+        writeln!(file, "cd /tmp").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 3);
+        assert_eq!(stats.skipped, 0);
+        let cmds = get_all_commands(&db);
+        assert_eq!(cmds, vec!["echo hello", "ls -la", "cd /tmp"]);
+    }
+
+    #[test]
+    fn test_import_extended_format() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, ": 1706384400:0;echo hello").unwrap();
+        writeln!(file, ": 1706384401:5;sleep 5").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 2);
+        let cmds = get_all_commands(&db);
+        assert_eq!(cmds, vec!["echo hello", "sleep 5"]);
+    }
+
+    #[test]
+    fn test_import_multiline_command() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, ": 1706384400:0;echo \"hello \\").unwrap();
+        writeln!(file, "world\"").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 1);
+        let cmds = get_all_commands(&db);
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0], "echo \"hello \\\nworld\"");
+    }
+
+    #[test]
+    fn test_import_escaped_backslash_not_continuation() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, ": 1706384400:0;echo test\\\\").unwrap();
+        writeln!(file, ": 1706384401:0;echo next").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 2);
+        let cmds = get_all_commands(&db);
+        assert_eq!(cmds, vec!["echo test\\\\", "echo next"]);
+    }
+
+    #[test]
+    fn test_import_command_with_semicolon() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, ": 1706384400:0;echo hello; echo world").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 1);
+        let cmds = get_all_commands(&db);
+        assert_eq!(cmds, vec!["echo hello; echo world"]);
+    }
+
+    #[test]
+    fn test_import_duplicates_skipped() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, ": 1706384400:0;echo hello").unwrap();
+        writeln!(file, ": 1706384400:0;echo hello").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 1);
+        assert_eq!(stats.skipped, 1);
+    }
+
+    #[test]
+    fn test_import_empty_lines_ignored() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "echo hello").unwrap();
+        writeln!(file, "").unwrap();
+        writeln!(file, "echo world").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 2);
+        let cmds = get_all_commands(&db);
+        assert_eq!(cmds.len(), 2);
+    }
+
+    #[test]
+    fn test_import_triple_backslash_is_continuation() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, ": 1706384400:0;echo test\\\\\\").unwrap();
+        writeln!(file, "continued").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 1);
+        let cmds = get_all_commands(&db);
+        assert_eq!(cmds[0], "echo test\\\\\\\ncontinued");
+    }
+
+    #[test]
+    fn test_import_colon_command_not_extended() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, ": this is a comment;not metadata").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 1);
+        let cmds = get_all_commands(&db);
+        assert_eq!(cmds[0], ": this is a comment;not metadata");
+    }
+
+    #[test]
+    fn test_import_multiline_three_lines() {
+        let db = Database::in_memory().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, ": 1706384400:0;for i in 1 2 3; do \\").unwrap();
+        writeln!(file, "  echo $i \\").unwrap();
+        writeln!(file, "done").unwrap();
+
+        let stats = db.import_zsh_history(&file.path().to_path_buf()).unwrap();
+
+        assert_eq!(stats.imported, 1);
+        let cmds = get_all_commands(&db);
+        assert_eq!(cmds[0], "for i in 1 2 3; do \\\n  echo $i \\\ndone");
+    }
 }
