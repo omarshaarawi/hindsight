@@ -140,7 +140,12 @@ fn main() {
                     }
                 };
 
-                let tag_filter = tags.map(|t| t.split(',').map(|s| s.trim().to_string()).collect());
+                let tag_filter: Option<Vec<String>> = tags.map(|t| {
+                    t.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                });
 
                 match db.get_saved_commands(tag_filter) {
                     Ok(commands) => {
@@ -201,6 +206,11 @@ fn main() {
         .mode
         .or(config.default_mode)
         .unwrap_or_else(|| "global".to_string());
+
+    if !["global", "session", "cwd", "saved"].contains(&mode.as_str()) {
+        eprintln!("Warning: invalid mode '{}', using 'global'", mode);
+        mode = "global".to_string();
+    }
     let limit = cli.limit.or(config.default_limit).unwrap_or(1000);
 
     let current_session = std::env::var("HINDSIGHT_SESSION").unwrap_or_default();

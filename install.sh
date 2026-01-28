@@ -2,6 +2,8 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "Installing hindsight..."
 
 cargo build --release
@@ -16,7 +18,7 @@ echo "Installed hindsight to $INSTALL_DIR"
 echo "Database initialized"
 
 SHELL_RC="$HOME/.zshrc"
-HINDSIGHT_LINE="source $PWD/shell/hindsight.zsh"
+HINDSIGHT_LINE="source $SCRIPT_DIR/shell/hindsight.zsh"
 
 if ! grep -q "hindsight.zsh" "$SHELL_RC" 2>/dev/null; then
     echo "" >> "$SHELL_RC"
