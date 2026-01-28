@@ -50,7 +50,12 @@ impl SkimItem for HistoryItem {
     fn display<'a>(&'a self, _context: DisplayContext) -> Line<'a> {
         let duration = format_duration(self.record.duration);
         let age = format_age(self.record.timestamp);
-        let display_str = format!("{:<6} {:<10}  {}", duration, age, self.record.command);
+        let cmd: String = self.record.command
+            .chars()
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .take(200)
+            .collect();
+        let display_str = format!("{:<5} {:>10}  {}", duration, age, cmd);
         Line::raw(display_str)
     }
 
@@ -96,7 +101,12 @@ impl SkimItem for SavedCommandItem {
             .map(|d| format!(" - {}", d))
             .unwrap_or_default();
 
-        let display_str = format!("{}{}{}", tags_str, self.command.command, desc_str);
+        let cmd: String = self.command.command
+            .chars()
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .take(200)
+            .collect();
+        let display_str = format!("{}{}{}", tags_str, cmd, desc_str);
         Line::raw(display_str)
     }
 
