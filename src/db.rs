@@ -146,15 +146,17 @@ impl Database {
             rusqlite::params![command, description, created_at],
         )?;
 
-        let command_id = self._conn.last_insert_rowid();
+        let command_id: i64 = self._conn.query_row(
+            "SELECT id FROM saved_commands WHERE command = ?1",
+            rusqlite::params![command],
+            |row| row.get(0),
+        )?;
 
-        // Clear existing tags
         self._conn.execute(
             "DELETE FROM command_tags WHERE command_id = ?1",
             rusqlite::params![command_id],
         )?;
 
-        // Insert new tags
         for tag in tags {
             self._conn.execute(
                 "INSERT OR IGNORE INTO tags (name) VALUES (?1)",
@@ -176,12 +178,12 @@ impl Database {
         Ok(command_id)
     }
 
-    pub fn delete_saved_command(&self, id: i64) -> Result<()> {
-        self._conn.execute(
+    pub fn delete_saved_command(&self, id: i64) -> Result<bool> {
+        let deleted = self._conn.execute(
             "DELETE FROM saved_commands WHERE id = ?1",
             rusqlite::params![id],
         )?;
-        Ok(())
+        Ok(deleted > 0)
     }
 
     pub fn get_saved_commands(&self, tag_filter: Option<Vec<String>>) -> Result<Vec<SavedCommand>> {
@@ -557,5 +559,42 @@ mod tests {
         assert_eq!(stats.imported, 1);
         let cmds = get_all_commands(&db);
         assert_eq!(cmds[0], "for i in 1 2 3; do \\\n  echo $i \\\ndone");
+    }
+
+    #[test]
+    fn test_save_command_upsert_preserves_tags() {
+        let db = Database::in_memory().unwrap();
+
+        let id1 = db.save_command("echo hello", Some("first"), vec!["tag1".to_string()]).unwrap();
+        let id2 = db.save_command("echo hello", Some("updated"), vec!["tag2".to_string(), "tag3".to_string()]).unwrap();
+
+        assert_eq!(id1, id2);
+
+        let cmds = db.get_saved_commands(None).unwrap();
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].description, Some("updated".to_string()));
+        assert_eq!(cmds[0].tags.len(), 2);
+        assert!(cmds[0].tags.contains(&"tag2".to_string()));
+        assert!(cmds[0].tags.contains(&"tag3".to_string()));
+    }
+
+    #[test]
+    fn test_delete_nonexistent_returns_false() {
+        let db = Database::in_memory().unwrap();
+
+        let deleted = db.delete_saved_command(999).unwrap();
+        assert!(!deleted);
+    }
+
+    #[test]
+    fn test_delete_existing_returns_true() {
+        let db = Database::in_memory().unwrap();
+
+        let id = db.save_command("echo hello", None, vec![]).unwrap();
+        let deleted = db.delete_saved_command(id).unwrap();
+        assert!(deleted);
+
+        let cmds = db.get_saved_commands(None).unwrap();
+        assert!(cmds.is_empty());
     }
 }

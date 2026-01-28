@@ -41,11 +41,10 @@ impl StreamingSearch {
         let conn = Connection::open(db_path)?;
 
         if mode == "saved" {
-            // Query saved commands
             let mut stmt = conn.prepare(
-                "SELECT id, command, description, created_at FROM saved_commands ORDER BY created_at DESC"
+                "SELECT id, command, description, created_at FROM saved_commands ORDER BY created_at DESC LIMIT ?1"
             )?;
-            let mut rows = stmt.query([])?;
+            let mut rows = stmt.query([limit])?;
 
             while let Some(row) = rows.next()? {
                 let id: i64 = row.get(0)?;
