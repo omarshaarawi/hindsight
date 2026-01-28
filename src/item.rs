@@ -3,8 +3,7 @@ use std::borrow::Cow;
 use crate::db::{HistoryRecord, SavedCommand};
 use chrono::Utc;
 
-fn format_duration(ms: i64) -> String {
-    let seconds = ms / 1000;
+fn format_duration(seconds: i64) -> String {
     if seconds < 60 {
         format!("{}s", seconds)
     } else if seconds < 3600 {
@@ -47,11 +46,11 @@ impl SkimItem for HistoryItem {
     }
     
     fn preview(&self, _context: PreviewContext) -> ItemPreview {
-        let duration_ms = self.record.duration;
-        let duration_str = if duration_ms < 1000 {
-            format!("{}ms", duration_ms)
+        let duration_secs = self.record.duration;
+        let duration_str = if duration_secs < 60 {
+            format!("{}s", duration_secs)
         } else {
-            format!("{:.1}s", duration_ms as f64 / 1000.0)
+            format!("{}m {}s", duration_secs / 60, duration_secs % 60)
         };
         
         let timestamp = chrono::DateTime::from_timestamp(self.record.timestamp, 0)
@@ -114,5 +113,37 @@ impl SkimItem for SavedCommandItem {
         );
 
         ItemPreview::Text(preview)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_duration_seconds() {
+        assert_eq!(format_duration(0), "0s");
+        assert_eq!(format_duration(5), "5s");
+        assert_eq!(format_duration(59), "59s");
+    }
+
+    #[test]
+    fn test_format_duration_minutes() {
+        assert_eq!(format_duration(60), "1m");
+        assert_eq!(format_duration(90), "1m");
+        assert_eq!(format_duration(3599), "59m");
+    }
+
+    #[test]
+    fn test_format_duration_hours() {
+        assert_eq!(format_duration(3600), "1h");
+        assert_eq!(format_duration(7200), "2h");
+        assert_eq!(format_duration(86399), "23h");
+    }
+
+    #[test]
+    fn test_format_duration_days() {
+        assert_eq!(format_duration(86400), "1d");
+        assert_eq!(format_duration(172800), "2d");
     }
 }

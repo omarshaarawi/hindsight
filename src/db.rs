@@ -11,9 +11,7 @@ pub struct Database {
 
 pub struct HistoryRecord {
     pub command: String,
-    #[allow(dead_code)]
     pub timestamp: i64,
-    #[allow(dead_code)]
     pub duration: i64,
 }
 
@@ -274,15 +272,12 @@ impl Database {
         let mut skipped = 0u64;
         let mut current_cmd = String::new();
         let mut current_ts: Option<i64> = None;
-        let mut line_number = 0i64;
 
         for line in reader.lines() {
             let line = match line {
                 Ok(l) => l,
                 Err(_) => continue,
             };
-
-            line_number += 1;
 
             if line.is_empty() {
                 continue;
@@ -334,7 +329,7 @@ impl Database {
                     current_ts = None;
                 }
             } else {
-                match self.insert_history_record(&line, Some(line_number), &hostname, &import_session) {
+                match self.insert_history_record(&line, None, &hostname, &import_session) {
                     Ok(true) => imported += 1,
                     Ok(false) => skipped += 1,
                     Err(_) => skipped += 1,
@@ -433,8 +428,9 @@ mod tests {
 
         assert_eq!(stats.imported, 3);
         assert_eq!(stats.skipped, 0);
-        let cmds = get_all_commands(&db);
-        assert_eq!(cmds, vec!["echo hello", "ls -la", "cd /tmp"]);
+        let mut cmds = get_all_commands(&db);
+        cmds.sort();
+        assert_eq!(cmds, vec!["cd /tmp", "echo hello", "ls -la"]);
     }
 
     #[test]
