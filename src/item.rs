@@ -49,11 +49,11 @@ impl SkimItem for HistoryItem {
     fn display<'a>(&'a self, _context: DisplayContext<'a>) -> AnsiString<'a> {
         let duration = format_duration(self.record.duration);
         let age = format_age(self.record.timestamp);
-        let cmd = self.record.command
+        let cmd: String = self.record.command
             .chars()
-            .map(|c| if c.is_control() && c != '\n' { ' ' } else { c })
-            .collect::<String>()
-            .replace('\n', " ");
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .take(200)
+            .collect();
         let display_str = format!("{:<5} {:>10}  {}", duration, age, cmd);
         AnsiString::new_string(display_str, vec![])
     }
