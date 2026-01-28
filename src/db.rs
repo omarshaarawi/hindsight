@@ -58,10 +58,10 @@ impl Database {
             [],
         )?;
         
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_session ON history(session)", [])?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_cwd ON history(cwd)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_session ON history(session, start_ts DESC)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_cwd ON history(cwd, start_ts DESC)", [])?;
         conn.execute("CREATE INDEX IF NOT EXISTS idx_history_start_ts ON history(start_ts DESC)", [])?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_command ON history(command)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_history_command_ts ON history(command, start_ts DESC)", [])?;
         
         conn.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(
