@@ -230,6 +230,8 @@ fn main() {
             .height(height)
             .multi(false)
             .reverse(true)
+            .tabstop(4)
+            .preview(None)
             .bind(vec!["tab:accept".to_string(), "ctrl-r:accept".to_string()])
             .header(Some(header))
             .build()
