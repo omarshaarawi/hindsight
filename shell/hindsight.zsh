@@ -1,4 +1,10 @@
-export HINDSIGHT_SESSION=${HINDSIGHT_SESSION:-$(uuidgen)}
+if [[ -z "$HINDSIGHT_SESSION" ]]; then
+  if command -v uuidgen >/dev/null 2>&1; then
+    export HINDSIGHT_SESSION=$(uuidgen)
+  else
+    export HINDSIGHT_SESSION="$$-$(date +%s)-$RANDOM"
+  fi
+fi
 export HINDSIGHT_MODE=${HINDSIGHT_MODE:-global}
 
 function hindsight_preexec() {

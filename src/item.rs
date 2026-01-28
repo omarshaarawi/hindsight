@@ -4,7 +4,9 @@ use crate::db::{HistoryRecord, SavedCommand};
 use chrono::Utc;
 
 fn format_duration(seconds: i64) -> String {
-    if seconds < 60 {
+    if seconds <= 0 {
+        "0s".to_string()
+    } else if seconds < 60 {
         format!("{}s", seconds)
     } else if seconds < 3600 {
         format!("{}m", seconds / 60)
@@ -16,7 +18,13 @@ fn format_duration(seconds: i64) -> String {
 }
 
 fn format_age(timestamp: i64) -> String {
+    if timestamp == 0 {
+        return "unknown".to_string();
+    }
     let diff = Utc::now().timestamp() - timestamp;
+    if diff < 0 {
+        return "just now".to_string();
+    }
     let unit = if diff < 60 {
         format!("{}s", diff)
     } else if diff < 3600 {
@@ -145,5 +153,27 @@ mod tests {
     fn test_format_duration_days() {
         assert_eq!(format_duration(86400), "1d");
         assert_eq!(format_duration(172800), "2d");
+    }
+
+    #[test]
+    fn test_format_duration_negative() {
+        assert_eq!(format_duration(-5), "0s");
+        assert_eq!(format_duration(-100), "0s");
+    }
+
+    #[test]
+    fn test_format_duration_zero() {
+        assert_eq!(format_duration(0), "0s");
+    }
+
+    #[test]
+    fn test_format_age_zero_timestamp() {
+        assert_eq!(format_age(0), "unknown");
+    }
+
+    #[test]
+    fn test_format_age_future_timestamp() {
+        let future = Utc::now().timestamp() + 1000;
+        assert_eq!(format_age(future), "just now");
     }
 }

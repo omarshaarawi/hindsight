@@ -111,8 +111,13 @@ fn main() {
                     }
                 };
 
-                let tag_vec = tags
-                    .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+                let tag_vec: Vec<String> = tags
+                    .map(|t| {
+                        t.split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect()
+                    })
                     .unwrap_or_default();
 
                 match db.save_command(&command, description.as_deref(), tag_vec) {
@@ -204,14 +209,6 @@ fn main() {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default()
     });
-
-    let _db = match Database::new() {
-        Ok(db) => db,
-        Err(e) => {
-            eprintln!("Failed to open database: {}", e);
-            std::process::exit(1);
-        }
-    };
 
     let mut selected_cmd: Option<String> = None;
     let mut edit = false;

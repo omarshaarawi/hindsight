@@ -35,13 +35,13 @@ impl Database {
     }
 
     fn with_connection(conn: Connection) -> Result<Self> {
-        
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
              PRAGMA cache_size = -64000;
              PRAGMA mmap_size = 268435456;
-             PRAGMA temp_store = MEMORY;",
+             PRAGMA temp_store = MEMORY;
+             PRAGMA foreign_keys = ON;",
         )?;
         
         conn.execute(
@@ -596,5 +596,52 @@ mod tests {
 
         let cmds = db.get_saved_commands(None).unwrap();
         assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn test_delete_cascades_to_command_tags() {
+        let db = Database::in_memory().unwrap();
+
+        let id = db.save_command("echo hello", None, vec!["tag1".to_string(), "tag2".to_string()]).unwrap();
+
+        let count_before: i64 = db._conn.query_row(
+            "SELECT COUNT(*) FROM command_tags WHERE command_id = ?1",
+            [id],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(count_before, 2);
+
+        db.delete_saved_command(id).unwrap();
+
+        let count_after: i64 = db._conn.query_row(
+            "SELECT COUNT(*) FROM command_tags WHERE command_id = ?1",
+            [id],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(count_after, 0);
+    }
+
+    #[test]
+    fn test_get_saved_commands_by_tag() {
+        let db = Database::in_memory().unwrap();
+
+        db.save_command("docker ps", None, vec!["docker".to_string()]).unwrap();
+        db.save_command("docker build", None, vec!["docker".to_string(), "build".to_string()]).unwrap();
+        db.save_command("cargo test", None, vec!["rust".to_string()]).unwrap();
+
+        let docker_cmds = db.get_saved_commands(Some(vec!["docker".to_string()])).unwrap();
+        assert_eq!(docker_cmds.len(), 2);
+
+        let rust_cmds = db.get_saved_commands(Some(vec!["rust".to_string()])).unwrap();
+        assert_eq!(rust_cmds.len(), 1);
+        assert_eq!(rust_cmds[0].command, "cargo test");
+    }
+
+    #[test]
+    fn test_save_command_empty_string_command() {
+        let db = Database::in_memory().unwrap();
+
+        let result = db.save_command("", None, vec![]);
+        assert!(result.is_ok());
     }
 }
