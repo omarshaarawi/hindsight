@@ -853,8 +853,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 [[package]]
 name = "frizbee"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3365720de81dac18e889afa72f5907aa061c975548da68e2400c056ebc94aec"
+source = "git+https://github.com/saghen/frizbee?branch=main#6fc5e6cf62132ffe39aa8dee4ff2675337637de3"
 dependencies = [
  "multiversion",
  "rayon",

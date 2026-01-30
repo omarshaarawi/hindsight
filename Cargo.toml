@@ -19,3 +19,6 @@ dirs = "6.0"
 
 [dev-dependencies]
 tempfile = "3.20"
+
+[patch.crates-io]
+frizbee = { git = "https://github.com/saghen/frizbee", branch = "main" }
